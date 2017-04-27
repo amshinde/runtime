@@ -1,4 +1,4 @@
-memo = "b158226f8356e79e4cfaf967844fb49efc7c24811b90d3f1a8577d8f5a48efd0"
+memo = "a15553dd93e4a073bc3122c2cd9dea61c70033081a6cd5a0ed71aa239213533a"
 
 [[projects]]
   name = "github.com/01org/ciao"
@@ -33,7 +33,7 @@ memo = "b158226f8356e79e4cfaf967844fb49efc7c24811b90d3f1a8577d8f5a48efd0"
 [[projects]]
   name = "github.com/containers/virtcontainers"
   packages = [".","pkg/cni","pkg/hyperstart","pkg/oci"]
-  revision = "cd7c5862e606f6d17d324e1ee8bb546b33baad30"
+  revision = "c1338cc3bfe9b9bcc8579860656f2edfe01df489"
 
 [[projects]]
   branch = "master"
