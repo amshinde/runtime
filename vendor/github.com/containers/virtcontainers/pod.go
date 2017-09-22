@@ -18,6 +18,7 @@ package virtcontainers
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -330,6 +331,13 @@ type PodConfig struct {
 	// Annotations keys must be unique strings and must be name-spaced
 	// with e.g. reverse domain notation (org.clearlinux.key).
 	Annotations map[string]string
+
+	// Devices is a linux specific configuration, these are devices that
+	// must be available within the container.
+	// Appears as a direct child of "linux" object in the oci json spec.
+	// Note this is different from the devices under "resources".
+	//Devices []CompatOCISpec.Linux.LinuxDevice
+	Devices []Device
 }
 
 // valid checks that the pod configuration is valid.
@@ -412,6 +420,8 @@ type Pod struct {
 	lockFile *os.File
 
 	annotationsLock *sync.RWMutex
+
+	devices []Device
 }
 
 // ID returns the pod identifier string.
@@ -522,6 +532,11 @@ func createPod(podConfig PodConfig) (*Pod, error) {
 		return nil, err
 	}
 
+	// Passthrough devices
+	if err := p.handleDevices(); err != nil {
+		return nil, err
+	}
+
 	// fetch agent capabilities and call addDrives if the agent has support
 	// for block devices.
 	caps := p.agent.capabilities()
@@ -581,6 +596,7 @@ func doFetchPod(podConfig PodConfig) (*Pod, error) {
 		configPath:      filepath.Join(configStoragePath, podConfig.ID),
 		state:           State{},
 		annotationsLock: &sync.RWMutex{},
+		devices:         podConfig.Devices,
 	}
 
 	containers, err := newContainers(p, podConfig.Containers)
@@ -1150,6 +1166,44 @@ func togglePausePod(podID string, pause bool) (*Pod, error) {
 	}
 
 	return p, nil
+}
+
+func (p *Pod) handleDevices() error {
+	for _, device := range p.devices {
+		// Handle VFIO devices
+		// TODO Add support for handling devices besides VFIO
+
+		if device.isVFIODeviceGroup() {
+			vfioGroup := filepath.Base(device.Path)
+			iommuDevicesPath := filepath.Join(sysIOMMUPath, vfioGroup, "devices")
+
+			deviceFiles, err := ioutil.ReadDir(iommuDevicesPath)
+			if err != nil {
+				return err
+			}
+
+			// Pass all devices in iommu group
+			for _, deviceFile := range deviceFiles {
+
+				//Get bdf of device eg 0000:00:1c.0
+				deviceBDF, err := bdf(deviceFile.Name())
+				if err != nil {
+					return err
+				}
+
+				vfioDevice := VFIODevice{
+					BDF: deviceBDF,
+				}
+
+				if err := p.hypervisor.addDevice(vfioDevice, vfioDev); err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
 }
 
 // addDrives can be used to pass block storage devices to the hypervisor in case of devicemapper storage.

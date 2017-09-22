@@ -193,6 +193,33 @@ func containerMounts(spec CompatOCISpec) []vc.Mount {
 	return mnts
 }
 
+func newLinuxDevice(d spec.LinuxDevice) vc.Device {
+	return vc.Device{
+		Path:     d.Path,
+		Type:     d.Type,
+		FileMode: d.FileMode,
+		Major:    d.Major,
+		Minor:    d.Minor,
+		UID:      *d.UID,
+		GID:      *d.GID,
+	}
+}
+
+func podDevices(spec CompatOCISpec) []vc.Device {
+	ociLinuxDevices := spec.Spec.Linux.Devices
+
+	if ociLinuxDevices == nil {
+		return []vc.Device{}
+	}
+
+	var devices []vc.Device
+	for _, d := range ociLinuxDevices {
+		devices = append(devices, newLinuxDevice(d))
+	}
+
+	return devices
+}
+
 func networkConfig(ocispec CompatOCISpec) (vc.NetworkConfig, error) {
 	linux := ocispec.Linux
 	if linux == nil {
@@ -381,6 +408,8 @@ func PodConfig(ocispec CompatOCISpec, runtime RuntimeConfig, bundlePath, cid, co
 			ConfigJSONKey: string(ociSpecJSON),
 			BundlePathKey: bundlePath,
 		},
+
+		Devices: podDevices(ocispec),
 	}
 
 	return podConfig, nil
