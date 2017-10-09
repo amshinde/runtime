@@ -28,8 +28,7 @@ type ccShim struct{}
 // CCShimConfig is the structure providing specific configuration
 // for ccShim implementation.
 type CCShimConfig struct {
-	Path  string
-	Debug bool
+	Path string
 }
 
 var consoleFileMode = os.FileMode(0660)
@@ -59,12 +58,7 @@ func (s *ccShim) start(pod Pod, params ShimParams) (int, error) {
 		return -1, fmt.Errorf("URL cannot be empty")
 	}
 
-	args := []string{config.Path, "-t", params.Token, "-u", params.URL}
-	if config.Debug {
-		args = append(args, "-d")
-	}
-
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command(config.Path, "-t", params.Token, "-u", params.URL)
 	cmd.Env = os.Environ()
 
 	if !params.Detach {

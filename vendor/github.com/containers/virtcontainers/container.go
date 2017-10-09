@@ -17,7 +17,6 @@
 package virtcontainers
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -81,110 +80,8 @@ type ContainerConfig struct {
 
 	Mounts []Mount
 
-	// Devices are devices that must be available within the container.
-	// We need the json:"-" tag so that the json package does not marshal
-	// or unmarshal that field. We need to handle it ourselves.
-	Devices []Device `json:"-"`
-}
-
-// MarshalJSON is the cutom ContainerConfig JSON marshalling routine.
-// We need such routine in order to properly marshall our Devices array.
-func (c *ContainerConfig) MarshalJSON() ([]byte, error) {
-	// We need a shadow structure in order to prevent json from
-	// entering a recursive loop when only calling json.Marshal().
-	type shadow struct {
-		ID             string
-		RootFs         string
-		ReadonlyRootfs bool
-		Cmd            Cmd
-		Annotations    map[string]string
-		Mounts         []Mount
-		Devices        []Device
-	}
-
-	s := &shadow{
-		ID:             c.ID,
-		RootFs:         c.RootFs,
-		ReadonlyRootfs: c.ReadonlyRootfs,
-		Cmd:            c.Cmd,
-		Annotations:    c.Annotations,
-		Mounts:         c.Mounts,
-		Devices:        c.Devices,
-	}
-
-	return json.Marshal(s)
-}
-
-// UnmarshalJSON is the custom ContainerConfig unmarshalling routine.
-// Unmarshalling the Devices array needs to be done through this
-// routine otherwise the json package has some hard time mapping
-// our serialized data back to the right Device.
-func (c *ContainerConfig) UnmarshalJSON(b []byte) error {
-	type tmp ContainerConfig
-	var s struct {
-		tmp
-		DevicesNoType []interface{} `json:"devices"`
-	}
-
-	if err := json.Unmarshal(b, &s); err != nil {
-		virtLog.Errorf("Unmarshalling container config error: %s", err)
-		return err
-	}
-
-	*c = ContainerConfig(s.tmp)
-
-	for _, m := range s.DevicesNoType {
-		switch deviceMap := m.(type) {
-		case map[string]interface{}:
-			deviceType, ok := deviceMap["DeviceType"]
-			if !ok {
-				continue
-			}
-
-			deviceInfo, ok := deviceMap["DeviceInfo"]
-			if !ok {
-				continue
-			}
-
-			switch deviceInfoMap := deviceInfo.(type) {
-			case map[string]interface{}:
-				info, err := newDeviceInfo(deviceInfoMap)
-				if err != nil {
-					virtLog.Errorf("Could not create new device info %v", err)
-					continue
-				}
-
-				switch deviceType {
-				case DeviceGeneric:
-					device := newGenericDevice(info)
-					if err != nil {
-						virtLog.Errorf("Could not create new device %v", err)
-						continue
-					}
-
-					c.Devices = append(c.Devices, device)
-				case DeviceVFIO:
-					device := newVFIODevice(info)
-					if err != nil {
-						virtLog.Errorf("Could not create new device %v", err)
-						continue
-					}
-
-					c.Devices = append(c.Devices, device)
-				case DeviceBlock:
-					device := newBlockDevice(info)
-					if err != nil {
-						virtLog.Errorf("Could not create new device %v", err)
-						continue
-					}
-
-					c.Devices = append(c.Devices, device)
-				}
-			}
-		}
-	}
-
-	return nil
+	// Device configuration for devices that must be available within the container.
+	DeviceInfos []DeviceInfo
 }
 
 // valid checks that the container configuration is valid.
@@ -350,6 +247,14 @@ func (c *Container) fetchMounts() ([]Mount, error) {
 	return c.pod.storage.fetchContainerMounts(c.podID, c.id)
 }
 
+func (c *Container) storeDevices() error {
+	return c.pod.storage.storeContainerDevices(c.podID, c.id, c.devices)
+}
+
+func (c *Container) fetchDevices() ([]Device, error) {
+	return c.pod.storage.fetchContainerDevices(c.podID, c.id)
+}
+
 // fetchContainer fetches a container config from a pod ID and returns a Container.
 func fetchContainer(pod *Pod, containerID string) (*Container, error) {
 	if pod == nil {
@@ -422,6 +327,11 @@ func newContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
 		return &Container{}, fmt.Errorf("Invalid container configuration")
 	}
 
+	devices, err := newDevices(contConfig.DeviceInfos)
+	if err != nil {
+		return &Container{}, err
+	}
+
 	c := &Container{
 		id:            contConfig.ID,
 		podID:         pod.id,
@@ -434,7 +344,7 @@ func newContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
 		state:         State{},
 		process:       Process{},
 		mounts:        contConfig.Mounts,
-		devices:       contConfig.Devices,
+		devices:       devices,
 	}
 
 	state, err := c.pod.storage.fetchContainerState(c.podID, c.id)
@@ -450,6 +360,11 @@ func newContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
 	mounts, err := c.fetchMounts()
 	if err == nil {
 		c.mounts = mounts
+	}
+
+	storedDevices, err := c.fetchDevices()
+	if err == nil {
+		c.devices = storedDevices
 	}
 
 	return c, nil
@@ -612,6 +527,7 @@ func (c *Container) start() error {
 	}
 
 	c.storeMounts()
+	c.storeDevices()
 
 	err = c.setContainerState(StateRunning)
 	if err != nil {
