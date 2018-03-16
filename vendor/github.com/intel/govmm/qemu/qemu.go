@@ -868,6 +868,7 @@ func (scsiCon SCSIController) QemuParams(config *Config) []string {
 		devParams = append(devParams, fmt.Sprintf("disable-modern=true"))
 	}
 
+	devParams = append(devParams, "iothread=iothread0")
 	qemuParams = append(qemuParams, "-device")
 	qemuParams = append(qemuParams, strings.Join(devParams, ","))
 
@@ -1473,6 +1474,11 @@ func (config *Config) appendBios() {
 	}
 }
 
+func (config *Config) appendIOThread() {
+	config.qemuParams = append(config.qemuParams, "-object")
+	config.qemuParams = append(config.qemuParams, "iothread,id=iothread0")
+}
+
 // LaunchQemu can be used to launch a new qemu instance.
 //
 // The Config parameter contains a set of qemu parameters and settings.
@@ -1496,6 +1502,7 @@ func LaunchQemu(config Config, logger QMPLog) (string, error) {
 	config.appendKnobs()
 	config.appendKernel()
 	config.appendBios()
+	config.appendIOThread()
 
 	if err := config.appendCPUs(); err != nil {
 		return "", err

@@ -700,6 +700,7 @@ func (q *QMP) ExecuteSCSIDeviceAdd(ctx context.Context, blockdevID, devID, drive
 		"driver": driver,
 		"drive":  blockdevID,
 		"bus":    bus,
+		//"iothread": "iothread0",
 	}
 	if scsiID >= 0 {
 		args["scsi-id"] = scsiID
