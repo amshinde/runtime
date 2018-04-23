@@ -154,3 +154,10 @@ See [the limitations file](docs/limitations.md) for further details.
 ## Home Page
 
 The canonical home page for the project is: https://github.com/clearcontainers
+
+## Reporting a security issue
+
+If you have information about a security issue or vulnerability with an 
+Intel-maintained open source project on https://github.com/intel, please send an 
+e-mail to secure-opensource@intel.com. Encrypt sensitive information using our 
+PGP public key. For issues related to Intel products, please visit [https://01.org/security](https://01.org/security)  
